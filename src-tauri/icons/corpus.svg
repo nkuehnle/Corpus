@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <rect width="1024" height="1024" fill="#0f766e"/>
+  <!-- An open book whose right-hand page is a rising bar chart: reading and data. -->
+  <g fill="none" stroke="#ffffff" stroke-width="44" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M512 330c-70-46-150-60-232-60v420c82 0 162 14 232 60 70-46 150-60 232-60V270c-82 0-162 14-232 60Z"/>
+    <path d="M512 330v420"/>
+  </g>
+  <g fill="#ffffff">
+    <rect x="566" y="520" width="40" height="110" rx="12"/>
+    <rect x="630" y="450" width="40" height="170" rx="12"/>
+    <rect x="694" y="380" width="40" height="232" rx="12"/>
+  </g>
+  <g stroke="#ffffff" stroke-width="30" stroke-linecap="round">
+    <path d="M336 400h110M336 480h110M336 560h110"/>
+  </g>
+</svg>
