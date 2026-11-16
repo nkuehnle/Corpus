@@ -9,6 +9,8 @@ export interface Table {
   rows: Cell[][];
   /** Which columns hold numbers (at least 90% of their filled cells parse as numbers). */
   numeric: boolean[];
+  /** The view a derived table is best seen in first (a PCA result opens as a scatter plot). */
+  prefer?: "scatter";
 }
 
 const TABULAR = /\.(csv|tsv|tab|txt|xlsx|xlsm|xls|ods)(\.gz)?$/i;
@@ -26,6 +28,13 @@ function toCell(raw: unknown): Cell {
   if (s === "" || /^(na|nan|null|n\/a)$/i.test(s)) return null;
   const n = Number(s);
   return Number.isFinite(n) ? n : s;
+}
+
+/** A table from column names and rows of raw values (a script's or an analysis's result). */
+export function makeTable(name: string, columns: string[], rows: unknown[][]): Table {
+  const table = build(name, [columns, ...rows]);
+  if (!table) throw new Error("The result has no columns.");
+  return table;
 }
 
 function build(name: string, grid: unknown[][]): Table | null {

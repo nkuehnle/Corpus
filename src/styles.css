@@ -892,3 +892,61 @@ button.card {
     display: none;
   }
 }
+
+/* ---- Analyze ------------------------------------------------------------- */
+.sample-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.sample-chip {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 6px 12px;
+  min-height: 36px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+.sample-chip b {
+  margin-right: 6px;
+}
+/* Group membership is spelled out with its letter; the fill only reinforces it. */
+.sample-chip.a {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text);
+}
+.sample-chip.b {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+textarea.code {
+  font-family: ui-monospace, "Roboto Mono", Menlo, monospace;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  min-height: 240px;
+  white-space: pre;
+  overflow-x: auto;
+}
+pre.log {
+  background: var(--surface-2);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 10px 0 0;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 240px;
+  overflow-y: auto;
+}
+pre.log.error {
+  color: var(--error);
+}

@@ -232,18 +232,43 @@ function AlertsTab() {
         list.length === 0 ? (
           <div className="status">Run a search, then tap “Alert me to new papers” to follow it.</div>
         ) : (
-          <div className="list">
-            {list.map((s) => (
-              <button key={s.uid} className="item" onClick={() => navigate(`/alert/${encodeURIComponent(s.uid)}`)}>
-                <span className="item-main">
-                  <span className="item-title">{s.name}</span>
-                  <div className="item-meta">{s.query}</div>
-                  <div className="item-meta">{s.notify ? `Alerts on · checked ${s.last_checked ?? "never"}` : "Alerts off"}</div>
-                </span>
-                {s.unseen > 0 && <span className="badge inline">{s.unseen}</span>}
-              </button>
-            ))}
-          </div>
+          <>
+            {list.some((s) => !s.notify) && (
+              <div className="card">
+                <div className="muted small">
+                  {list.filter((s) => !s.notify).length} of these are saved searches with alerts off. Turn alerts on to be
+                  notified when PubMed adds matching papers.
+                </div>
+                <div className="row">
+                  <button
+                    className="button primary"
+                    onClick={async () => {
+                      await repo().followAllSearches();
+                      await ensureNotificationPermission();
+                      await publishAlertPlan(repo());
+                      searches.reload();
+                    }}
+                  >
+                    Turn on alerts for all
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="list">
+              {list.map((s) => (
+                <button key={s.uid} className="item" onClick={() => navigate(`/alert/${encodeURIComponent(s.uid)}`)}>
+                  <span className="item-main">
+                    <span className="item-title">{s.name}</span>
+                    <div className="item-meta">{s.query}</div>
+                    <div className="item-meta">
+                      {s.notify ? `Alerts on · checked ${s.last_checked ?? "never"}` : "Alerts off"}
+                    </div>
+                  </span>
+                  {s.unseen > 0 && <span className="badge inline">{s.unseen}</span>}
+                </button>
+              ))}
+            </div>
+          </>
         )
       }
     </Await>

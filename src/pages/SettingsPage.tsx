@@ -14,6 +14,7 @@ const LABEL: Record<string, [string, string]> = {
   resources: ["library item", "library items"],
   datasets: ["dataset", "datasets"],
   searches: ["saved search", "saved searches"],
+  scripts: ["analysis script", "analysis scripts"],
 };
 
 function describe(summary: ImportSummary): string {

@@ -38,7 +38,12 @@ export async function mergeFrom(source: Db, target: Db): Promise<ImportSummary> 
   if (sourceVersion > SCHEMA_VERSION) throw new Error("That file was made by a newer version of Corpus.");
 
   const summary: ImportSummary = { tables: [] };
+  const present = new Set(
+    (await source.select<{ name: string }>(`SELECT name FROM sqlite_master WHERE type = 'table'`)).map((r) => r.name),
+  );
   for (const t of TABLES) {
+    // A file from an older version simply lacks the tables added since.
+    if (!present.has(t.name)) continue;
     const rows = await source.select(`SELECT * FROM ${t.name}`);
     const existing = new Set((await target.select<{ uid: string }>(`SELECT uid FROM ${t.name}`)).map((r) => r.uid));
     const cols = [...t.key, ...t.content, ...t.state];

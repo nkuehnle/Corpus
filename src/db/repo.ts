@@ -101,7 +101,17 @@ export interface Lesson {
   notes: string;
 }
 
-export type ItemKind = "paper" | "resource" | "dataset" | "search";
+export interface Script {
+  uid: string;
+  name: string;
+  description: string;
+  code: string;
+  /** The code as it was when you last agreed to run it; null for a script you have never run. */
+  approved_code: string | null;
+  added_at: string;
+}
+
+export type ItemKind = "paper" | "resource" | "dataset" | "search" | "script";
 
 export interface LessonItem {
   uid: string;
@@ -200,6 +210,10 @@ export class Repo {
       [searchUid, p.pmid, p.title, p.authors, p.journal, p.pubDate, now()],
     );
   }
+  /** Turns alerts on for every saved search that has them off, starting from today. */
+  followAllSearches() {
+    return this.db.execute(`UPDATE searches SET notify = 1, last_checked = ? WHERE notify = 0`, [today()]);
+  }
   markHitsSeen(searchUid: string) {
     return this.db.execute(`UPDATE search_hits SET seen = 1 WHERE search_uid = ?`, [searchUid]);
   }
@@ -249,6 +263,32 @@ export class Repo {
     await this.db.execute(`DELETE FROM resources WHERE uid = ?`, [uid]);
   }
 
+  // ---- Analysis scripts
+  scripts(): Promise<Script[]> {
+    return this.db.select<Script>(`SELECT * FROM scripts ORDER BY name`);
+  }
+  script(uid: string): Promise<Script | null> {
+    return this.one<Script>(`SELECT * FROM scripts WHERE uid = ?`, [uid]);
+  }
+  /** Saves a script you wrote or edited yourself, which counts as agreeing to run it. */
+  async saveScript(script: Pick<Script, "name" | "description" | "code"> & { uid?: string }): Promise<string> {
+    const uid = script.uid ?? newUid("script");
+    await this.db.execute(
+      `INSERT INTO scripts (uid, name, description, code, approved_code, added_at) VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT (uid) DO UPDATE SET name = excluded.name, description = excluded.description,
+         code = excluded.code, approved_code = excluded.approved_code`,
+      [uid, script.name, script.description, script.code, script.code, now()],
+    );
+    return uid;
+  }
+  approveScript(uid: string, code: string) {
+    return this.db.execute(`UPDATE scripts SET approved_code = ? WHERE uid = ?`, [code, uid]);
+  }
+  async removeScript(uid: string): Promise<void> {
+    await this.db.execute(`DELETE FROM lesson_items WHERE kind = 'script' AND ref_uid = ?`, [uid]);
+    await this.db.execute(`DELETE FROM scripts WHERE uid = ?`, [uid]);
+  }
+
   // ---- Study plans
   courses(): Promise<Course[]> {
     return this.db.select<Course>(
@@ -289,17 +329,19 @@ export class Repo {
   lessonItems(lessonUid: string): Promise<LessonItem[]> {
     return this.db.select<LessonItem>(
       `SELECT i.uid, i.kind, i.ref_uid, i.note,
-         COALESCE(p.title, r.title, d.title, s.name) AS title,
+         COALESCE(p.title, r.title, d.title, s.name, x.name) AS title,
          CASE i.kind
            WHEN 'paper' THEN p.authors || ' · ' || p.journal || ' ' || substr(p.pub_date, 1, 4)
            WHEN 'resource' THEN r.kind || CASE WHEN r.author = '' THEN '' ELSE ' · ' || r.author END
            WHEN 'dataset' THEN d.source || ' ' || d.accession
-           WHEN 'search' THEN s.query END AS detail
+           WHEN 'search' THEN s.query
+           WHEN 'script' THEN x.description END AS detail
        FROM lesson_items i
        LEFT JOIN papers p ON i.kind = 'paper' AND p.uid = i.ref_uid
        LEFT JOIN resources r ON i.kind = 'resource' AND r.uid = i.ref_uid
        LEFT JOIN datasets d ON i.kind = 'dataset' AND d.uid = i.ref_uid
        LEFT JOIN searches s ON i.kind = 'search' AND s.uid = i.ref_uid
+       LEFT JOIN scripts x ON i.kind = 'script' AND x.uid = i.ref_uid
        WHERE i.lesson_uid = ? ORDER BY i.position`,
       [lessonUid],
     );

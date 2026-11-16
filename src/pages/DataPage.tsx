@@ -6,6 +6,7 @@ import { Segmented, errorText } from "../components/ui";
 import { detectVolcano, numericColumn, summarize, type Cell, type Table } from "../data/table";
 import { IN_APP, importFile, pickFile, readStored, removeStored } from "../platform";
 import { showTables, viewer } from "../viewer";
+import { ANNOTATION, AnalyzePanel, labelColumn } from "./AnalyzePanel";
 
 const ROWS = 50;
 
@@ -155,15 +156,6 @@ function Distribution({ table }: { table: Table }) {
   );
 }
 
-/** The column most likely to name a row: a gene symbol or name if there is one. */
-function firstLabel(table: Table): number {
-  const named = table.columns.findIndex((c, i) => !table.numeric[i] && /symbol|gene.?name|^name$/i.test(c));
-  return named >= 0 ? named : table.numeric.indexOf(false);
-}
-
-/** Genomic coordinates and lengths are numbers but rarely what anyone wants to plot. */
-const ANNOTATION = /^(chr|chromosome|start|stop|end|pos|strand|length|codinglength|level)/i;
-
 function ScatterView({ table }: { table: Table }) {
   const theme = useChartTheme();
   const all = table.numeric.flatMap((n, i) => (n ? [i] : []));
@@ -171,10 +163,26 @@ function ScatterView({ table }: { table: Table }) {
   const numeric = measured.length >= 2 ? measured : all;
   const [xCol, setX] = useState(numeric[0]);
   const [yCol, setY] = useState(numeric[1] ?? numeric[0]);
-  const [labelCol, setLabel] = useState(firstLabel(table));
+  const [labelCol, setLabel] = useState(labelColumn(table));
   const [log, setLog] = useState(false);
+  const [colourCol, setColour] = useState(() => table.columns.findIndex((c, i) => !table.numeric[i] && /^group$/i.test(c)));
+  // The three most common values get a colour each (a scatter plot cannot carry more);
+  // anything else, including rows with no value, is drawn first in grey as "Other".
+  const groups = useMemo(() => {
+    if (colourCol < 0) return [{ name: "Rows", color: theme.mark }];
+    const counts = new Map<string, number>();
+    let unnamed = false;
+    for (const r of table.rows) {
+      if (r[colourCol] == null) unnamed = true;
+      else counts.set(String(r[colourCol]), (counts.get(String(r[colourCol])) ?? 0) + 1);
+    }
+    const top = [...counts.entries()].sort((x, y) => y[1] - x[1]).slice(0, 3);
+    const named = top.map(([name], i) => ({ name, color: theme.categorical[i] }));
+    return unnamed || counts.size > 3 ? [{ name: "Other", color: theme.neutral }, ...named] : named;
+  }, [table, colourCol, theme]);
   const points = useMemo(() => {
     const out: (Point & { rawX: number; rawY: number })[] = [];
+    const groupOf = new Map(groups.map((g, i) => [g.name, i]));
     // log10(value + 1) keeps zero counts on the plot.
     const scale = (v: number) => (log ? Math.log10(v + 1) : v);
     for (const r of table.rows) {
@@ -187,11 +195,11 @@ function ScatterView({ table }: { table: Table }) {
         rawX: x,
         rawY: y,
         label: labelCol >= 0 && r[labelCol] != null ? String(r[labelCol]) : null,
-        group: 0,
+        group: colourCol < 0 ? 0 : (groupOf.get(String(r[colourCol])) ?? 0),
       });
     }
     return out;
-  }, [table, xCol, yCol, labelCol, log]);
+  }, [table, xCol, yCol, labelCol, log, colourCol, groups]);
   const axis = (col: number) => (log ? `log10(${table.columns[col]} + 1)` : table.columns[col]);
   return (
     <>
@@ -199,6 +207,7 @@ function ScatterView({ table }: { table: Table }) {
         <ColumnSelect table={table} label="Across" value={xCol} onChange={setX} numeric />
         <ColumnSelect table={table} label="Up" value={yCol} onChange={setY} numeric />
         <ColumnSelect table={table} label="Name points by" value={labelCol} onChange={setLabel} numeric={false} optional />
+        <ColumnSelect table={table} label="Colour by" value={colourCol} onChange={setColour} numeric={false} optional />
       </div>
       <label className="toggle">
         <span>
@@ -209,7 +218,7 @@ function ScatterView({ table }: { table: Table }) {
       </label>
       <Scatter
         points={points}
-        groups={[{ name: "Rows", color: theme.mark }]}
+        groups={groups}
         xLabel={axis(xCol)}
         yLabel={axis(yCol)}
         describe={(p) => {
@@ -227,7 +236,7 @@ function Volcano({ table }: { table: Table }) {
   const found = detectVolcano(table)!;
   const [effect, setEffect] = useState(found.effect);
   const [pCol, setP] = useState(found.p);
-  const [labelCol, setLabel] = useState(found.label ?? firstLabel(table));
+  const [labelCol, setLabel] = useState(found.label ?? labelColumn(table));
   const [alpha, setAlpha] = useState(0.05);
   const [minEffect, setMinEffect] = useState(1);
 
@@ -302,26 +311,28 @@ function Volcano({ table }: { table: Table }) {
   );
 }
 
-type View = "table" | "distribution" | "scatter" | "volcano";
+type View = "table" | "distribution" | "scatter" | "volcano" | "analyze";
 
-function TablePanel({ table }: { table: Table }) {
+function TablePanel({ table, onResult }: { table: Table; onResult: (t: Table) => void }) {
   const numericCount = table.numeric.filter(Boolean).length;
   const volcano = detectVolcano(table) !== null;
-  const [view, setView] = useState<View>(volcano ? "volcano" : "table");
+  const [view, setView] = useState<View>(viewer.pendingScript ? "analyze" : volcano ? "volcano" : (table.prefer ?? "table"));
   const options: { value: View; label: string }[] = [{ value: "table", label: "Table" }];
   if (volcano) options.push({ value: "volcano", label: "Volcano" });
   if (numericCount >= 1) options.push({ value: "distribution", label: "Distribution" });
   if (numericCount >= 2) options.push({ value: "scatter", label: "Scatter" });
+  options.push({ value: "analyze", label: "Analyze" });
   return (
     <>
       <div className="muted small" style={{ marginBottom: 8 }}>
         {table.rows.length.toLocaleString()} rows · {table.columns.length} columns
       </div>
-      {options.length > 1 && <Segmented value={view} options={options} onChange={setView} />}
+      <Segmented value={view} options={options} onChange={setView} />
       {view === "table" && <TableView table={table} />}
       {view === "volcano" && <Volcano table={table} />}
       {view === "distribution" && <Distribution table={table} />}
       {view === "scatter" && <ScatterView table={table} />}
+      {view === "analyze" && <AnalyzePanel table={table} onResult={onResult} />}
     </>
   );
 }
@@ -364,6 +375,7 @@ export default function DataPage() {
       {!table ? (
         <div className="card">
           <div className="card-title">Nothing open</div>
+          {viewer.pendingScript && <p>Open a table first; the script from your lesson will be waiting under Analyze.</p>}
           <p className="muted" style={{ marginBottom: 0 }}>
             Open a paper's supplementary files or a dataset's files and pick a table, or open a CSV, TSV or Excel file from this
             device. Tables with fold-change and p-value columns get a volcano plot.
@@ -390,7 +402,14 @@ export default function DataPage() {
           ) : (
             <h2 className="section-title">{table.name}</h2>
           )}
-          <TablePanel key={`${viewer.title}/${which}`} table={table} />
+          <TablePanel
+            key={`${viewer.title}/${which}`}
+            table={table}
+            onResult={(result) => {
+              viewer.tables.push(result);
+              setWhich(viewer.tables.length - 1);
+            }}
+          />
         </>
       )}
     </div>

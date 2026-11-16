@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Await, Back, Icon, KindIcon, Markdown, Notes, ask } from "../components/ui";
 import { now, type Lesson, type LessonItem } from "../db/repo";
 import { navigate, repo, useLoad } from "../store";
+import { viewer } from "../viewer";
 
 export function LearnPage() {
   const courses = useLoad(() => repo().courses(), []);
@@ -134,6 +135,7 @@ const GROUPS: { kind: LessonItem["kind"]; title: string }[] = [
   { kind: "resource", title: "Watch and read" },
   { kind: "paper", title: "Papers" },
   { kind: "dataset", title: "Datasets to explore" },
+  { kind: "script", title: "Analyses to run in the Data tab" },
   { kind: "search", title: "Keep up with the literature" },
 ];
 
@@ -185,7 +187,16 @@ export function LessonPage({ uid }: { uid: string }) {
                     </h2>
                     <div className="list">
                       {group.map((i) => (
-                        <button key={i.uid} className="item" disabled={!i.title} onClick={() => navigate(itemRoute(i))}>
+                        <button
+                          key={i.uid}
+                          className="item"
+                          disabled={!i.title}
+                          onClick={() => {
+                            // A script opens in the Data tab, on whatever table is open there.
+                            if (i.kind === "script") viewer.pendingScript = i.ref_uid;
+                            navigate(i.kind === "script" ? "/data" : itemRoute(i));
+                          }}
+                        >
                           <KindIcon kind={i.kind === "resource" ? (i.detail?.split(" · ")[0] ?? "link") : i.kind} />
                           <span className="item-main">
                             <span className="item-title">{i.title ?? "Missing from this database"}</span>

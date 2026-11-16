@@ -14,6 +14,8 @@ export interface ChartTheme {
   down: string;
   up: string;
   neutral: string;
+  /** Up to three groups on one scatter plot; more than that cannot be told apart reliably. */
+  categorical: string[];
 }
 
 export const LIGHT: ChartTheme = {
@@ -26,6 +28,7 @@ export const LIGHT: ChartTheme = {
   down: "#2a78d6",
   up: "#e34948",
   neutral: "#b4b9c2",
+  categorical: ["#2a78d6", "#eb6834", "#1baf7a"],
 };
 
 export const DARK: ChartTheme = {
@@ -38,6 +41,7 @@ export const DARK: ChartTheme = {
   down: "#3987e5",
   up: "#e66767",
   neutral: "#565d69",
+  categorical: ["#3987e5", "#d95926", "#199e70"],
 };
 
 function currentMode(): "light" | "dark" {

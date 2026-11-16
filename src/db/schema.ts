@@ -1,6 +1,6 @@
 /** Every row is keyed by a stable text `uid`, and rows point at each other by uid.
  *  That makes merging another Corpus database a plain upsert with no id remapping. */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export const MIGRATIONS: string[][] = [
   [
@@ -89,6 +89,17 @@ export const MIGRATIONS: string[][] = [
     `CREATE INDEX lesson_items_lesson ON lesson_items (lesson_uid, position)`,
     `CREATE INDEX lessons_module ON lessons (module_uid, position)`,
   ],
+  [
+    // Analysis scripts for the data viewer. `approved_code` is the version of the code the
+    // user has agreed to run; a script whose code differs asks before it runs.
+    `CREATE TABLE scripts (
+      uid TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      code TEXT NOT NULL,
+      approved_code TEXT,
+      added_at TEXT NOT NULL)`,
+  ],
 ];
 
 /** How each table merges on import. `content` columns are overwritten by the incoming
@@ -113,6 +124,7 @@ export const TABLES: { name: string; key: string[]; content: string[]; state: st
     content: ["kind", "title", "url", "author", "description"],
     state: ["file", "position", "added_at"],
   },
+  { name: "scripts", key: ["uid"], content: ["name", "description", "code"], state: ["added_at"] },
   { name: "courses", key: ["uid"], content: ["position", "title", "description"], state: [] },
   { name: "modules", key: ["uid"], content: ["course_uid", "position", "title", "summary"], state: [] },
   {

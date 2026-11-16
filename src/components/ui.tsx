@@ -36,7 +36,7 @@ export function Icon({ name }: { name: string }) {
 
 /** Icon tile for a list row; `kind` is a paper, dataset, search or resource kind. */
 export function KindIcon({ kind }: { kind: string }) {
-  const name = { paper: "papers", dataset: "datasets", resource: "link" }[kind] ?? kind;
+  const name = { paper: "papers", dataset: "datasets", resource: "link", script: "data" }[kind] ?? kind;
   return (
     <span className="kind-icon">
       <Icon name={name} />

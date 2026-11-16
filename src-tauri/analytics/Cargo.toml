@@ -1,0 +1,9 @@
+[package]
+name = "corpus-analytics"
+version = "0.1.0"
+description = "Statistics for the Corpus data viewer: differential expression and PCA"
+edition = "2024"
+
+[dependencies]
+nalgebra = "0.33"
+statrs = "0.18"
