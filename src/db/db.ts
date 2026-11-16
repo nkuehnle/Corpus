@@ -61,5 +61,41 @@ export async function mergeFrom(source: Db, target: Db): Promise<ImportSummary> 
     }
     summary.tables.push({ name: t.name, added, updated: rows.length - added });
   }
+  if (present.has("courses")) await dropWhatThePlanDropped(source, target);
   return summary;
+}
+
+/** Makes each study plan in the file match the file: lessons, modules and lesson links that a
+ *  newer version of the plan no longer has are removed, so an updated plan replaces the old
+ *  one instead of piling up on it. A dropped lesson is kept if you wrote notes on it, and
+ *  papers, library items and datasets are never removed: those are your library. */
+async function dropWhatThePlanDropped(source: Db, target: Db): Promise<void> {
+  const uids = async (db: Db, sql: string, params: Value[]) =>
+    new Set((await db.select<{ uid: string }>(sql, params)).map((r) => r.uid));
+  const inCourse = {
+    modules: `SELECT uid FROM modules WHERE course_uid = ?`,
+    lessons: `SELECT l.uid FROM lessons l JOIN modules m ON m.uid = l.module_uid WHERE m.course_uid = ?`,
+    // Links made by a plan are named after their lesson; ones you add yourself are not.
+    lesson_items: `SELECT i.uid FROM lesson_items i JOIN lessons l ON l.uid = i.lesson_uid JOIN modules m ON m.uid = l.module_uid
+                   WHERE m.course_uid = ? AND i.uid LIKE 'item:lesson:%'`,
+  };
+  for (const course of await source.select<{ uid: string }>(`SELECT uid FROM courses`)) {
+    // Children first, so a lesson's links are judged while the lesson can still be found.
+    for (const table of ["lesson_items", "lessons", "modules"] as const) {
+      const keep = await uids(source, inCourse[table], [course.uid]);
+      for (const uid of await uids(target, inCourse[table], [course.uid])) {
+        if (keep.has(uid)) continue;
+        if (table === "lessons") {
+          const [lesson] = await target.select<{ notes: string }>(`SELECT notes FROM lessons WHERE uid = ?`, [uid]);
+          if (lesson.notes.trim()) continue;
+          await target.execute(`DELETE FROM lesson_items WHERE lesson_uid = ?`, [uid]);
+        }
+        if (table === "modules") {
+          const [left] = await target.select<{ n: number }>(`SELECT COUNT(*) AS n FROM lessons WHERE module_uid = ?`, [uid]);
+          if (left.n) continue;
+        }
+        await target.execute(`DELETE FROM ${table} WHERE uid = ?`, [uid]);
+      }
+    }
+  }
 }

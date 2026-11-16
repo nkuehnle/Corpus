@@ -23,8 +23,10 @@ Corpus database file that the app merges into its own.
 
 A study plan is a Corpus database file: lessons plus the papers, videos, textbooks, datasets,
 saved searches and analysis scripts they refer to. Copy one to the phone, then in the app go
-to **Learn › settings (gear) › Import a database file**. Importing again later refreshes
-lesson text and keeps your progress, notes and stars.
+to **Learn › settings (gear) › Import a database file**. Importing a newer version of a
+plan updates it in place: rows are matched by id, so nothing is duplicated; lessons and
+links the plan no longer has are removed; and your progress, notes and stars are kept.
+Papers, library items and datasets are never removed by an import.
 
 Plans are personal files and are not part of this repository.
 

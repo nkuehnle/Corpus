@@ -184,11 +184,18 @@ const STATUS_LABEL: Record<PaperStatus, string> = { unread: "To read", reading: 
 function LibraryTab() {
   const papers = useLoad(() => repo().papers(), []);
   const [filter, setFilter] = useState<"all" | "starred" | PaperStatus>("all");
+  const [find, setFind] = useState("");
   return (
     <Await of={papers}>
       {(all) => {
-        if (!all.length) return <div className="status">Papers you save show up here.</div>;
-        const shown = all.filter((p) => filter === "all" || (filter === "starred" ? p.starred : p.status === filter));
+        if (!all.length)
+          return <div className="status">Papers you save, and papers that come with a study plan, show up here.</div>;
+        const needle = find.trim().toLowerCase();
+        const shown = all.filter(
+          (p) =>
+            (filter === "all" || (filter === "starred" ? p.starred : p.status === filter)) &&
+            (!needle || `${p.title} ${p.authors} ${p.journal} ${p.pub_date} ${p.notes}`.toLowerCase().includes(needle)),
+        );
         return (
           <>
             <Segmented
@@ -202,6 +209,13 @@ function LibraryTab() {
               ]}
               onChange={setFilter}
             />
+            <div className="search-bar">
+              <input
+                value={find}
+                onChange={(e) => setFind(e.target.value)}
+                placeholder="Find in your library: title, author, journal, notes"
+              />
+            </div>
             {shown.length === 0 && <div className="status">Nothing here.</div>}
             <div className="list">
               {shown.map((p) => (
@@ -211,6 +225,7 @@ function LibraryTab() {
                     <div className="item-meta">{p.authors}</div>
                     <div className="item-meta">
                       {p.journal} · {p.pub_date} · {STATUS_LABEL[p.status]}
+                      {p.pmcid ? " · free full text" : ""}
                     </div>
                   </span>
                   {p.starred ? <span className="item-side">★</span> : null}
@@ -275,21 +290,37 @@ function AlertsTab() {
   );
 }
 
+type PapersTab = "library" | "search" | "alerts";
+/** The sub-tab last used, so tapping Papers returns you to where you were. */
+let lastTab: PapersTab | null = null;
+
 export function PapersPage({ tab }: { tab: string }) {
-  const current = tab === "library" || tab === "alerts" ? tab : "search";
+  const named = tab === "library" || tab === "alerts" || tab === "search" ? tab : null;
+  // With no sub-tab asked for, open on the library if it has anything in it: an empty
+  // search box says nothing about the papers a study plan just brought in.
+  const papers = useLoad(async () => (named || lastTab ? 0 : (await repo().papers()).length), [named]);
+  const current: PapersTab | null =
+    named ?? lastTab ?? (papers.data === undefined ? null : papers.data > 0 ? "library" : "search");
+  useEffect(() => {
+    if (current) lastTab = current;
+  }, [current]);
   return (
     <div className="page">
       <h1 className="page-title">Papers</h1>
-      <Segmented
-        value={current}
-        options={[
-          { value: "search", label: "Search" },
-          { value: "library", label: "Library" },
-          { value: "alerts", label: "Alerts" },
-        ]}
-        onChange={(t) => navigate(`/papers/${t}`)}
-      />
-      {current === "search" ? <SearchTab /> : current === "library" ? <LibraryTab /> : <AlertsTab />}
+      {current && (
+        <>
+          <Segmented
+            value={current}
+            options={[
+              { value: "library", label: "Library" },
+              { value: "search", label: "Search PubMed" },
+              { value: "alerts", label: "Alerts" },
+            ]}
+            onChange={(t) => navigate(`/papers/${t}`)}
+          />
+          {current === "search" ? <SearchTab /> : current === "library" ? <LibraryTab /> : <AlertsTab />}
+        </>
+      )}
     </div>
   );
 }

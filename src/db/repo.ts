@@ -332,6 +332,7 @@ export class Repo {
          COALESCE(p.title, r.title, d.title, s.name, x.name) AS title,
          CASE i.kind
            WHEN 'paper' THEN p.authors || ' · ' || p.journal || ' ' || substr(p.pub_date, 1, 4)
+             || CASE WHEN p.pmcid IS NULL THEN '' ELSE ' · free full text' END
            WHEN 'resource' THEN r.kind || CASE WHEN r.author = '' THEN '' ELSE ' · ' || r.author END
            WHEN 'dataset' THEN d.source || ' ' || d.accession
            WHEN 'search' THEN s.query
