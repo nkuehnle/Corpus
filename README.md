@@ -28,7 +28,9 @@ plan updates it in place: rows are matched by id, so nothing is duplicated; less
 links the plan no longer has are removed; and your progress, notes and stars are kept.
 Papers, library items and datasets are never removed by an import.
 
-Plans are personal files and are not part of this repository.
+The study plan used for testing (`muscle-growth.db`) is attached to each GitHub release, so
+it can be downloaded straight to the phone. The sources it is built from are not in this
+repository.
 
 ## Building and running
 

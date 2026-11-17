@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# Publishes a Corpus pre-release on GitHub with the signed APK.
+# Publishes a Corpus pre-release on GitHub with the signed APK and, if built, the study plan.
 # Usage: scripts/publish.sh <version> <notes-file>      (build the APK and push the tag first)
-# Same approach as FitLedger's release script: when gh is not logged in, the GitHub token
-# comes from an open VS Code window's git credential socket and is never printed or stored.
+# Credentials come from scripts/gh-vscode.sh (gh's login, or an open VS Code window).
 set -euo pipefail
 VERSION=${1:?usage: publish.sh <version> <notes-file>}
 NOTES=${2:?usage: publish.sh <version> <notes-file>}
@@ -20,27 +19,13 @@ git -C "$ROOT" ls-remote --exit-code --tags origin "v$VERSION" >/dev/null || { e
 DIR=$(mktemp -d); trap 'rm -rf "$DIR"' EXIT
 cp "$BUILT" "$DIR/corpus-$VERSION.apk"
 
-if gh auth status >/dev/null 2>&1; then
-  TOKEN=""
-else
-  # VS Code answers git credential requests over its askpass socket.
-  CODE=/snap/code/current/usr/share/code
-  export GIT_ASKPASS=$CODE/resources/app/extensions/git/dist/askpass.sh
-  export VSCODE_GIT_ASKPASS_NODE=$CODE/code
-  export VSCODE_GIT_ASKPASS_MAIN=$CODE/resources/app/extensions/git/dist/askpass-main.js
-  export VSCODE_GIT_ASKPASS_EXTRA_ARGS=
-  TOKEN=""
-  for sock in /run/user/1000/vscode-git-*.sock; do
-    [ -S "$sock" ] || continue
-    TOKEN=$(VSCODE_GIT_IPC_HANDLE=$sock timeout 10 bash -c 'printf "protocol=https\nhost=github.com\n\n" | git credential fill 2>/dev/null' | sed -n 's/^password=//p' || true)
-    [ -n "$TOKEN" ] && break
-  done
-  [ -n "$TOKEN" ] || { echo "no token: open a VS Code window, or run gh auth login --web"; exit 1; }
-fi
+# The study plan is attached when it has been built, so it can be downloaded on the phone.
+PLAN=$ROOT/data/muscle-growth.db
+ASSETS=("$DIR/corpus-$VERSION.apk")
+[ -f "$PLAN" ] && cp "$PLAN" "$DIR/muscle-growth.db" && ASSETS+=("$DIR/muscle-growth.db")
 
-GH_TOKEN=$TOKEN gh release create "v$VERSION" --repo "$REPO" --verify-tag --prerelease \
-  --title "Corpus $VERSION" --notes-file "$NOTES" "$DIR/corpus-$VERSION.apk" >/dev/null
-unset TOKEN
+"$ROOT/scripts/gh-vscode.sh" release create "v$VERSION" --repo "$REPO" --verify-tag --prerelease \
+  --title "Corpus $VERSION" --notes-file "$NOTES" "${ASSETS[@]}" >/dev/null
 
 curl -s "https://api.github.com/repos/$REPO/releases/tags/v$VERSION" | VERSION=$VERSION python3 -c "$(cat <<'PY'
 import json, os, sys
