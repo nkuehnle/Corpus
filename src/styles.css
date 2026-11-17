@@ -950,3 +950,19 @@ pre.log {
 pre.log.error {
   color: var(--error);
 }
+
+/* Paper links, grouped by host */
+.links {
+  margin-bottom: 16px;
+}
+.links-group {
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 4px 0 6px;
+}
+.links .list {
+  margin-bottom: 10px;
+}

@@ -225,7 +225,7 @@ function LibraryTab() {
                     <div className="item-meta">{p.authors}</div>
                     <div className="item-meta">
                       {p.journal} · {p.pub_date} · {STATUS_LABEL[p.status]}
-                      {p.pmcid ? " · free full text" : ""}
+                      {p.pmcid ? " · PMC full text" : p.doi ? " · full text at publisher" : ""}
                     </div>
                   </span>
                   {p.starred ? <span className="item-side">★</span> : null}
@@ -433,6 +433,61 @@ export function AlertPage({ uid }: { uid: string }) {
   );
 }
 
+/** Where a paper can be read, grouped by who hosts it: NCBI's records (PubMed, and PubMed
+ *  Central when there is a free copy) and the publisher's own page, reached through the DOI. */
+function PaperLinks({ p }: { p: PaperSummary }) {
+  const ncbi = [
+    {
+      label: "PubMed record",
+      detail: `PMID ${p.pmid} · pubmed.ncbi.nlm.nih.gov`,
+      url: `https://pubmed.ncbi.nlm.nih.gov/${p.pmid}/`,
+    },
+    ...(p.pmcid
+      ? [
+          {
+            label: "Full text in PubMed Central",
+            detail: `${p.pmcid} · free · pmc.ncbi.nlm.nih.gov`,
+            url: `https://pmc.ncbi.nlm.nih.gov/articles/${p.pmcid}/`,
+          },
+        ]
+      : []),
+  ];
+  return (
+    <div className="links">
+      <div className="links-group">NCBI</div>
+      <div className="list">
+        {ncbi.map((l) => (
+          <button key={l.url} className="item" onClick={() => openExternal(l.url)}>
+            <span className="item-main">
+              <span className="item-title">{l.label}</span>
+              <div className="item-meta">{l.detail}</div>
+            </span>
+            <span className="item-side">↗</span>
+          </button>
+        ))}
+      </div>
+      <div className="links-group">Publisher</div>
+      <div className="list">
+        {p.doi ? (
+          <button className="item" onClick={() => openExternal(`https://doi.org/${p.doi}`)}>
+            <span className="item-main">
+              <span className="item-title">Publisher's page (DOI)</span>
+              <div className="item-meta">
+                {p.doi} · doi.org{p.pmcid ? "" : " · may need a subscription"}
+              </div>
+            </span>
+            <span className="item-side">↗</span>
+          </button>
+        ) : (
+          <div className="item">
+            <span className="item-main item-meta">PubMed lists no DOI for this record.</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function toSummary(p: Paper): PaperSummary {
   return {
     pmid: p.pmid!,
@@ -538,24 +593,7 @@ export function PaperPage({ pmid }: { pmid: string }) {
                 )}
               </div>
 
-              <div className="row" style={{ marginBottom: 12 }}>
-                <button className="button small" onClick={() => openExternal(`https://pubmed.ncbi.nlm.nih.gov/${p.pmid}/`)}>
-                  PubMed
-                </button>
-                {p.pmcid && (
-                  <button
-                    className="button small"
-                    onClick={() => openExternal(`https://pmc.ncbi.nlm.nih.gov/articles/${p.pmcid}/`)}
-                  >
-                    Free full text
-                  </button>
-                )}
-                {p.doi && (
-                  <button className="button small" onClick={() => openExternal(`https://doi.org/${p.doi}`)}>
-                    Publisher
-                  </button>
-                )}
-              </div>
+              <PaperLinks p={p} />
 
               <h2 className="section-title">Abstract</h2>
               {abstract == null ? (
@@ -580,9 +618,7 @@ export function PaperPage({ pmid }: { pmid: string }) {
               ) : typeof files === "string" ? (
                 <div className="status error">{files}</div>
               ) : files.length === 0 ? (
-                <p className="muted">
-                  No supplementary files are openly available for this article. Try the free full text page.
-                </p>
+                <p className="muted">No supplementary files are openly available for this article. Try the PMC full text page.</p>
               ) : (
                 <FileList files={files} title={p.title} />
               )}
