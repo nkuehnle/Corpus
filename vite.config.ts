@@ -38,10 +38,12 @@ function devBackend(): Plugin {
 
       server.middlewares.use("/__fetch", async (req, res) => {
         try {
-          const url = new URL(req.url!, "http://x").searchParams.get("url")!;
-          const upstream = await fetch(url);
+          const params = new URL(req.url!, "http://x").searchParams;
+          const upstream = await fetch(params.get("url")!, { method: params.get("method") ?? "GET" });
           res.statusCode = upstream.status;
           res.setHeader("content-type", upstream.headers.get("content-type") ?? "application/octet-stream");
+          const length = upstream.headers.get("content-length");
+          if (length) res.setHeader("x-upstream-length", length);
           res.end(Buffer.from(await upstream.arrayBuffer()));
         } catch (e) {
           res.statusCode = 502;

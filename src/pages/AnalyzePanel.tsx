@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Await, Icon, ask, errorText } from "../components/ui";
 import { TRANSFORMS, differentialExpression, guessTransform, samplePca, type Transform } from "../data/analysis";
+import { groupingFields } from "../data/geo";
 import { TEMPLATE, runScript } from "../data/scripts";
 import type { Table } from "../data/table";
 import type { Script } from "../db/repo";
@@ -19,6 +20,10 @@ export function labelColumn(table: Table): number {
 
 type Side = "a" | "b";
 
+/** Values that name a control or baseline condition. */
+const CONTROL =
+  /\b(sham|control|ctrl|con|baseline|basal|pre|pre-?training|untrained|placebo|vehicle|wt|wild[- ]?type|young|day ?0|t0|healthy|sedentary)\b/i;
+
 function Groups({ table, onResult }: { table: Table; onResult: (t: Table) => void }) {
   const samples = useMemo(() => table.columns.flatMap((c, i) => (table.numeric[i] && !ANNOTATION.test(c) ? [i] : [])), [table]);
   const [side, setSide] = useState<Map<number, Side>>(new Map());
@@ -28,6 +33,22 @@ function Groups({ table, onResult }: { table: Table; onResult: (t: Table) => voi
   const [label, setLabel] = useState(() => labelColumn(table));
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // GEO sample annotations, when the columns could be matched to samples.
+  const fields = useMemo(() => groupingFields(table), [table]);
+  const [field, setField] = useState("");
+  const [valueA, setValueA] = useState("");
+  const [valueB, setValueB] = useState("");
+  const annotation = (col: number) => (field ? table.samples?.[col]?.fields[field] : undefined);
+
+  const applyField = (key: string, a: string, b: string) => {
+    const next = new Map<number, Side>();
+    for (const col of samples) {
+      const v = table.samples?.[col]?.fields[key];
+      if (v !== undefined && v === a) next.set(col, "a");
+      else if (v !== undefined && v === b) next.set(col, "b");
+    }
+    setSide(next);
+  };
 
   // Typing a pattern assigns every matching column; tapping a chip then adjusts one at a time.
   const applyPatterns = (a: string, b: string) => {
@@ -51,8 +72,8 @@ function Groups({ table, onResult }: { table: Table; onResult: (t: Table) => voi
 
   const a = samples.filter((c) => side.get(c) === "a");
   const b = samples.filter((c) => side.get(c) === "b");
-  const nameA = patternA.trim() || "A";
-  const nameB = patternB.trim() || "B";
+  const nameA = (field && valueA) || patternA.trim() || "A";
+  const nameB = (field && valueB) || patternB.trim() || "B";
 
   const run = async (what: string, job: () => Promise<Table>) => {
     setBusy(what);
@@ -72,6 +93,59 @@ function Groups({ table, onResult }: { table: Table; onResult: (t: Table) => voi
 
   return (
     <>
+      {fields.length > 0 && (
+        <div className="controls">
+          <label>
+            Group by sample annotation
+            <select
+              value={field}
+              onChange={(e) => {
+                const key = e.target.value;
+                const values = (fields.find((f) => f.key === key)?.values ?? []).map(([v]) => v);
+                // Put the control condition in group A, so a positive log2FC means up with treatment.
+                const control = values.find((v) => CONTROL.test(v));
+                const a = control ?? values[0] ?? "";
+                const b = values.find((v) => v !== a) ?? "";
+                setField(key);
+                setValueA(a);
+                setValueB(b);
+                if (key) applyField(key, a, b);
+                else setSide(new Map());
+              }}
+            >
+              <option value="">Not used</option>
+              {fields.map((f) => (
+                <option key={f.key} value={f.key}>
+                  {f.key} ({f.values.length} values)
+                </option>
+              ))}
+            </select>
+          </label>
+          {field &&
+            (["a", "b"] as const).map((which) => (
+              <label key={which}>
+                Group {which.toUpperCase()}
+                <select
+                  value={which === "a" ? valueA : valueB}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (which === "a") setValueA(v);
+                    else setValueB(v);
+                    applyField(field, which === "a" ? v : valueA, which === "b" ? v : valueB);
+                  }}
+                >
+                  {fields
+                    .find((f) => f.key === field)!
+                    .values.map(([v, n]) => (
+                      <option key={v} value={v}>
+                        {v} ({n})
+                      </option>
+                    ))}
+                </select>
+              </label>
+            ))}
+        </div>
+      )}
       <div className="controls">
         <label>
           Group A: columns containing
@@ -98,6 +172,7 @@ function Groups({ table, onResult }: { table: Table; onResult: (t: Table) => voi
           <button key={col} type="button" className={`sample-chip ${side.get(col) ?? ""}`} onClick={() => cycle(col)}>
             {side.get(col) && <b>{side.get(col) === "a" ? "A" : "B"}</b>}
             {table.columns[col]}
+            {table.samples?.[col] && <span className="chip-note">{annotation(col) ?? table.samples[col]!.title}</span>}
           </button>
         ))}
       </div>
@@ -139,7 +214,9 @@ function Groups({ table, onResult }: { table: Table; onResult: (t: Table) => voi
           disabled={busy !== null}
           onClick={() => {
             const chosen = a.length + b.length >= 3 ? [...a, ...b] : samples;
-            const group = (col: number) => (side.get(col) === "a" ? nameA : side.get(col) === "b" ? nameB : "No group");
+            // With an annotation chosen, colour every sample by it, not only the two groups.
+            const group = (col: number) =>
+              annotation(col) ?? (side.get(col) === "a" ? nameA : side.get(col) === "b" ? nameB : "No group");
             return run("pca", () => samplePca(table, chosen, group, transform));
           }}
         >

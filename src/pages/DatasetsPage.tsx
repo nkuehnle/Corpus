@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { mostAccessed, searchGeo, type DatasetSummary } from "../api/datasets";
-import { geoSupplements, type RemoteFile } from "../api/supplements";
+import { seriesFiles, type Series } from "../api/geo";
 import { FileList } from "../components/FileList";
 import { Await, Back, Icon, Notes, Segmented, ask, errorText } from "../components/ui";
 import { datasetUid, type Dataset } from "../db/repo";
@@ -16,7 +16,7 @@ function open(d: DatasetSummary) {
   navigate(`/dataset/${encodeURIComponent(uid)}`);
 }
 
-function Row({ d }: { d: DatasetSummary }) {
+export function DatasetRow({ d, starred }: { d: DatasetSummary; starred?: boolean }) {
   return (
     <button className="item" onClick={() => open(d)}>
       <span className="item-main">
@@ -26,6 +26,7 @@ function Row({ d }: { d: DatasetSummary }) {
       <span className="item-side">
         {d.samples != null && `${d.samples} samples`}
         {d.views != null && `${d.views.toLocaleString()} views`}
+        {starred && <div>★</div>}
       </span>
     </button>
   );
@@ -83,7 +84,7 @@ function SearchTab() {
           </div>
           <div className="list">
             {last.results.map((d) => (
-              <Row key={d.accession} d={d} />
+              <DatasetRow key={d.accession} d={d} />
             ))}
           </div>
           {last.results.length < last.count && (
@@ -109,7 +110,7 @@ function PopularTab() {
         {(list) => (
           <div className="list">
             {list.map((d) => (
-              <Row key={d.source + d.accession} d={d} />
+              <DatasetRow key={d.source + d.accession} d={d} />
             ))}
           </div>
         )}
@@ -118,23 +119,37 @@ function PopularTab() {
   );
 }
 
-function toSummary(d: Dataset): DatasetSummary {
+export function toSummary(d: Dataset): DatasetSummary {
   return { ...d, samples: d.n_samples, views: null };
 }
 
 function SavedTab() {
   const data = useLoad(() => repo().datasets(), []);
+  const [filter, setFilter] = useState<"all" | "starred">("all");
   return (
     <Await of={data}>
       {(list) =>
         list.length === 0 ? (
           <div className="status">Datasets you save show up here.</div>
         ) : (
-          <div className="list">
-            {list.map((d) => (
-              <Row key={d.uid} d={toSummary(d)} />
-            ))}
-          </div>
+          <>
+            <Segmented
+              value={filter}
+              options={[
+                { value: "all", label: `All ${list.length}` },
+                { value: "starred", label: "Starred" },
+              ]}
+              onChange={setFilter}
+            />
+            {filter === "starred" && !list.some((d) => d.starred) && <div className="status">Nothing starred yet.</div>}
+            <div className="list">
+              {list
+                .filter((d) => filter === "all" || d.starred)
+                .map((d) => (
+                  <DatasetRow key={d.uid} d={toSummary(d)} starred={!!d.starred} />
+                ))}
+            </div>
+          </>
         )
       }
     </Await>
@@ -167,13 +182,13 @@ export function DatasetPage({ uid }: { uid: string }) {
     if (!summary) throw new Error("Open this dataset from a search to see it.");
     return { saved, summary };
   }, [uid]);
-  const [files, setFiles] = useState<RemoteFile[] | string | null>(null);
+  const [series, setSeries] = useState<Series | string | null>(null);
 
   const accession = data.data?.summary.accession;
   const isGeoSeries = data.data?.summary.source === "GEO" && /^GSE\d+$/.test(accession ?? "");
   useEffect(() => {
     if (!isGeoSeries) return;
-    geoSupplements(accession!).then(setFiles, (e) => setFiles(errorText(e)));
+    seriesFiles(accession!).then(setSeries, (e: unknown) => setSeries(errorText(e)));
   }, [accession, isGeoSeries]);
 
   return (
@@ -210,6 +225,18 @@ export function DatasetPage({ uid }: { uid: string }) {
               )}
             </dl>
             <div className="row" style={{ marginBottom: 12 }}>
+              {saved && (
+                <button
+                  className={`icon-btn ${saved.starred ? "on" : ""}`}
+                  aria-label={saved.starred ? "Remove star" : "Star"}
+                  onClick={async () => {
+                    await repo().updateDataset(uid, { starred: saved.starred ? 0 : 1 });
+                    data.reload();
+                  }}
+                >
+                  <span style={{ fontSize: "1.4rem" }}>{saved.starred ? "★" : "☆"}</span>
+                </button>
+              )}
               {!saved && (
                 <button
                   className="button primary"
@@ -237,14 +264,19 @@ export function DatasetPage({ uid }: { uid: string }) {
                 <h2 className="section-title" style={{ marginTop: 20 }}>
                   Files
                 </h2>
-                {files === null ? (
+                {series === null ? (
                   <div className="status">Looking…</div>
-                ) : typeof files === "string" ? (
-                  <div className="status error">{files}</div>
-                ) : files.length === 0 ? (
+                ) : typeof series === "string" ? (
+                  <div className="status error">{series}</div>
+                ) : series.files.length === 0 ? (
                   <p className="muted">This series has no supplementary files.</p>
                 ) : (
-                  <FileList files={files} title={`${d.accession} · ${d.title}`} />
+                  <FileList
+                    files={series.files}
+                    owner={uid}
+                    title={`${d.accession} · ${d.title}`}
+                    geo={{ accession: d.accession, platforms: series.platforms }}
+                  />
                 )}
               </>
             )}

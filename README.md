@@ -3,13 +3,16 @@
 An Android app (Tauri 2 + React + TypeScript) for following and studying the life-science
 literature:
 
-- **Papers**: search PubMed, save papers with notes and reading status, and get notified
-  when new papers match a saved search.
-- **Datasets**: search GEO, see the most-viewed datasets across repositories, save the ones
-  you care about, and open their files.
+- **Papers**: search PubMed, save and star papers with notes and reading status, see which
+  papers have GEO data, and get notified when new papers match a saved search.
+- **Datasets**: search GEO, see the most-viewed datasets across repositories, save and
+  star the ones you care about, and download their files into the app (series matrices,
+  count tables, and chosen files from per-sample archives), with each sample labelled by its
+  GEO annotations.
 - **Data**: open supplementary tables and dataset files (CSV, TSV, Excel, gzip, zip) as
   sortable tables with histograms, scatter plots and automatic volcano plots. Compare two
-  groups of samples (moderated t-test), run a sample PCA, or write short JavaScript scripts
+  groups of samples (moderated t-test, with groups picked by GEO annotation), run a sample
+  PCA coloured by annotation, or write short JavaScript scripts
   that turn the open table into a new one.
 - **Library**: keep videos, links, textbooks and PDFs, with a built-in PDF reader that
   remembers your page.
@@ -91,8 +94,10 @@ src/
   alerts.ts        checks saved searches for new papers; hands the plan to the Android worker
   pages/           one file per tab
 src-tauri/
-  src/lib.rs       plugins plus two commands: copy_any (copies to/from Android content
-                   URIs) and analyze (the built-in analyses)
+  src/lib.rs       plugins plus copy_any (copies to/from Android content URIs) and
+                   analyze (the built-in analyses)
+  src/files.rs     download_file (streams into app storage with progress), tar_list,
+                   tar_extract, remove_stored
   analytics/       corpus-analytics: differential expression and PCA, plain Rust with tests
   gen/android/     the Android project; AlertWorker.kt is the background alert check
 scripts/           dev helpers and the release script
@@ -105,8 +110,8 @@ Design decisions worth knowing:
   id remapping. Each table declares which columns are content (overwritten on import) and
   which are yours (kept).
 - **Logic is in TypeScript; Rust is thin.** The app uses the Tauri SQL, HTTP, FS, dialog,
-  notification and opener plugins. The one custom command exists because Android's file
-  picker returns `content://` URIs that only the FS plugin can open.
+  notification and opener plugins. Custom commands exist where the plugins fall short:
+  Android's `content://` URIs, streaming large downloads to disk, and reading tar archives.
 - **Built-in analyses are Rust; ad hoc ones are JavaScript.** `src-tauri/analytics` holds
   the two-group comparison and the sample PCA. The comparison is a moderated t-test on log2
   values (log2 counts per million for raw counts): each gene's pooled variance is shrunk
@@ -123,6 +128,15 @@ Design decisions worth knowing:
   before their first run.
 - **Network access is limited** to NCBI, Europe PMC, OmicsDI and the PMC open-data bucket
   (`src-tauri/capabilities/default.json`). Add a host there before fetching from it.
+- **GEO files** are found from the series' SOFT record (GEO's folder listings refuse
+  automated clients) and downloaded to `files/<dataset>/` in app storage; the `downloads`
+  table records them so they open offline and can be removed. Columns are matched to GEO
+  samples by accession, title, or the library or file name in the sample description, and
+  probe IDs get gene symbols from the platform's annotation file. GEO's `suppl/filelist.txt`
+  says what a RAW archive holds, so archives with nothing readable are never downloaded, and
+  files inside one are fetched individually from their sample's folder.
+- **Papers and GEO series** are linked through NCBI's `pubmed_gds` links, asked for a whole
+  list of papers at once and mapped back through each series' PubMed ids.
 - **Supplementary files** come from the PMC open-access bucket
   (`pmc-oa-opendata.s3.amazonaws.com`), which lists every file deposited with an
   open-access article. Papers outside the PMC open-access set have nothing to fetch.
@@ -134,7 +148,10 @@ Design decisions worth knowing:
 
 ## Known limits
 
-- Files are parsed in memory, so downloads over 60 MB are opened in the browser instead.
+- Downloads are capped at 2 GB, but a table is parsed in memory and only files up to
+  100 MB as downloaded are opened. Raw formats (CEL, BAM, IDAT, bigWig, HDF5, RDS) are
+  stored but not read.
+- Column-to-sample matching is heuristic; columns it cannot match show their own names.
 - The group comparison handles two unpaired groups. It does not model paired samples,
   covariates or batches; use DESeq2, edgeR or limma for anything beyond a first look.
 - "Most viewed" datasets is OmicsDI's global list, not specific to a field. OmicsDI's search

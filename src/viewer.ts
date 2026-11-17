@@ -1,4 +1,3 @@
-import { download, type RemoteFile } from "./api/supplements";
 import { readTables, type Table } from "./data/table";
 import { navigate } from "./store";
 
@@ -10,17 +9,17 @@ export const viewer: { title: string; tables: Table[]; pendingScript: string | n
   pendingScript: null,
 };
 
-/** Larger downloads than this are refused: the whole file has to fit in memory to be parsed. */
-export const MAX_DOWNLOAD = 60 * 1024 * 1024;
+/** Larger files are not parsed: the whole table has to fit in memory. They can still be
+ *  downloaded (archives are read entry by entry). */
+export const MAX_TABLE_BYTES = 100 * 1024 * 1024;
 
-export function showTables(title: string, name: string, bytes: Uint8Array) {
-  const tables = readTables(name, bytes);
+export function showLoadedTables(title: string, tables: Table[]) {
   if (!tables.length) throw new Error("No tables found in that file.");
   viewer.title = title;
   viewer.tables = tables;
   navigate("/data");
 }
 
-export async function openRemote(file: RemoteFile, title: string) {
-  showTables(title, file.name, await download(file));
+export function showTables(title: string, name: string, bytes: Uint8Array) {
+  showLoadedTables(title, readTables(name, bytes));
 }

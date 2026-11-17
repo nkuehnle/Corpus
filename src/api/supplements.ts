@@ -5,6 +5,10 @@ export interface RemoteFile {
   url: string;
   /** Bytes, when the server reports it. */
   size: number | null;
+  /** A GEO series matrix: processed values with the sample annotations. */
+  kind?: "matrix";
+  /** For an archive, the files inside it, when the repository lists them. */
+  contents?: { name: string; size: number }[];
 }
 
 const BUCKET = "https://pmc-oa-opendata.s3.amazonaws.com";
@@ -29,28 +33,6 @@ export async function paperSupplements(pmcid: string): Promise<RemoteFile[]> {
   const files = parseBucketListing(await res.text());
   // The article ships as <PMCID>.<version>.{xml,txt,pdf,json}; everything else is supplementary.
   return files.filter((f) => !f.name.startsWith(`${pmcid}.`) && !FIGURE.test(f.name));
-}
-
-function parseSize(text: string): number | null {
-  const m = text.match(/^([\d.]+)([KMG]?)$/);
-  if (!m) return null;
-  return Math.round(Number(m[1]) * { "": 1, K: 1024, M: 1024 ** 2, G: 1024 ** 3 }[m[2] as "" | "K" | "M" | "G"]);
-}
-
-export function parseGeoListing(html: string, base: string): RemoteFile[] {
-  const files: RemoteFile[] = [];
-  for (const m of html.matchAll(/<a href="([^"/?][^"]*)">[^<]*<\/a>\s+\S+ \S+\s+(\S+)/g)) {
-    if (m[1].endsWith("/")) continue;
-    files.push({ name: decodeURIComponent(m[1]), url: base + m[1], size: parseSize(m[2]) });
-  }
-  return files;
-}
-
-/** Supplementary files of a GEO series (processed count tables usually live here). */
-export async function geoSupplements(accession: string): Promise<RemoteFile[]> {
-  const stub = accession.length > 6 ? `${accession.slice(0, -3)}nnn` : "GSEnnn";
-  const base = `https://ftp.ncbi.nlm.nih.gov/geo/series/${stub}/${accession}/suppl/`;
-  return parseGeoListing(await (await http(base)).text(), base);
 }
 
 export async function download(file: RemoteFile): Promise<Uint8Array> {

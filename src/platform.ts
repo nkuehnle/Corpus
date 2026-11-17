@@ -1,4 +1,5 @@
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { appConfigDir, appDataDir, join } from "@tauri-apps/api/path";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { exists, mkdir, readFile, remove, writeTextFile } from "@tauri-apps/plugin-fs";
@@ -12,8 +13,10 @@ export const IN_APP = "__TAURI_INTERNALS__" in window;
 export const IS_ANDROID = /Android/i.test(navigator.userAgent);
 
 // ---- HTTP: the app fetches through Rust (no CORS); the browser goes through the dev proxy.
-export async function http(url: string): Promise<Response> {
-  const res = IN_APP ? await tauriFetch(url) : await fetch(`/__fetch?url=${encodeURIComponent(url)}`);
+export async function http(url: string, method: "GET" | "HEAD" = "GET"): Promise<Response> {
+  const res = IN_APP
+    ? await tauriFetch(url, { method })
+    : await fetch(`/__fetch?method=${method}&url=${encodeURIComponent(url)}`);
   if (!res.ok) throw new Error(`${new URL(url).hostname} answered ${res.status}`);
   return res;
 }
@@ -75,13 +78,57 @@ export async function importFile(picked: Picked, name: string): Promise<string> 
   return name;
 }
 
+// In a plain browser there is no app storage; downloads are kept in memory for the session.
+const devStore = new Map<string, Uint8Array>();
+
 export async function readStored(name: string): Promise<Uint8Array> {
+  if (!IN_APP) {
+    const bytes = devStore.get(name);
+    if (!bytes) throw new Error(`${name} is not stored`);
+    return bytes;
+  }
   return readFile(await dataPath(name));
 }
 
+/** Removes a stored file, or a directory of them. */
 export async function removeStored(name: string): Promise<void> {
-  const path = await dataPath(name);
-  if (await exists(path)) await remove(path);
+  if (!IN_APP) {
+    for (const key of devStore.keys()) if (key === name || key.startsWith(`${name}/`)) devStore.delete(key);
+    return;
+  }
+  await invoke("remove_stored", { name });
+}
+
+/** Downloads a file into app storage (streamed to disk, so size is not limited by memory)
+ *  and returns its size. Progress arrives through onDownloadProgress, tagged with `id`. */
+export async function downloadToStore(url: string, name: string, id: string): Promise<number> {
+  if (IN_APP) return invoke<number>("download_file", { url, name, id });
+  const bytes = new Uint8Array(await (await http(url)).arrayBuffer());
+  devStore.set(name, bytes);
+  return bytes.length;
+}
+
+export interface DownloadProgress {
+  id: string;
+  received: number;
+  total: number | null;
+}
+
+export function onDownloadProgress(handler: (p: DownloadProgress) => void): () => void {
+  if (!IN_APP) return () => {};
+  const stop = listen<DownloadProgress>("download-progress", (e) => handler(e.payload));
+  return () => void stop.then((unlisten) => unlisten());
+}
+
+/** The files in a stored tar archive. Needs the app: archives can be gigabytes. */
+export async function tarList(name: string): Promise<{ name: string; size: number }[]> {
+  if (!IN_APP) throw new Error("Archives can be opened in the installed app.");
+  return invoke("tar_list", { name });
+}
+
+/** Extracts entries of a stored archive into directory `into`; returns their stored names. */
+export function tarExtract(name: string, entries: string[], into: string): Promise<string[]> {
+  return invoke("tar_extract", { name, entries, into });
 }
 
 /** URL the WebView can load a stored file from (supports range requests, so big PDFs stream). */

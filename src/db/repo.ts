@@ -54,6 +54,7 @@ export interface Dataset {
   url: string;
   pmid: string | null;
   notes: string;
+  starred: number;
   added_at: string;
 }
 
@@ -99,6 +100,16 @@ export interface Lesson {
   questions: string;
   done_at: string | null;
   notes: string;
+}
+
+export interface Download {
+  /** Name inside app storage. */
+  path: string;
+  owner_uid: string;
+  name: string;
+  url: string;
+  size: number;
+  added_at: string;
 }
 
 export interface Script {
@@ -235,7 +246,7 @@ export class Repo {
       [datasetUid(d), d.source, d.accession, d.title, d.summary, d.organism, d.kind, d.samples, d.url, d.pmid, now()],
     );
   }
-  updateDataset(uid: string, fields: Partial<Pick<Dataset, "notes">>) {
+  updateDataset(uid: string, fields: Partial<Pick<Dataset, "notes" | "starred">>) {
     return this.update("datasets", uid, fields);
   }
   removeDataset(uid: string) {
@@ -261,6 +272,28 @@ export class Repo {
   async removeResource(uid: string): Promise<void> {
     await this.db.execute(`DELETE FROM lesson_items WHERE kind = 'resource' AND ref_uid = ?`, [uid]);
     await this.db.execute(`DELETE FROM resources WHERE uid = ?`, [uid]);
+  }
+
+  // ---- Downloaded files
+  downloads(ownerUid: string): Promise<Download[]> {
+    return this.db.select<Download>(`SELECT * FROM downloads WHERE owner_uid = ? ORDER BY name`, [ownerUid]);
+  }
+  async downloadTotals(): Promise<{ files: number; bytes: number }> {
+    return (await this.one<{ files: number; bytes: number }>(
+      `SELECT COUNT(*) AS files, COALESCE(SUM(size), 0) AS bytes FROM downloads`,
+    ))!;
+  }
+  allDownloads(): Promise<Download[]> {
+    return this.db.select<Download>(`SELECT * FROM downloads`);
+  }
+  addDownload(d: Omit<Download, "added_at">) {
+    return this.db.execute(
+      `INSERT OR REPLACE INTO downloads (path, owner_uid, name, url, size, added_at) VALUES (?, ?, ?, ?, ?, ?)`,
+      [d.path, d.owner_uid, d.name, d.url, d.size, now()],
+    );
+  }
+  removeDownload(path: string) {
+    return this.db.execute(`DELETE FROM downloads WHERE path = ?`, [path]);
   }
 
   // ---- Analysis scripts

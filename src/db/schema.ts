@@ -1,6 +1,6 @@
 /** Every row is keyed by a stable text `uid`, and rows point at each other by uid.
  *  That makes merging another Corpus database a plain upsert with no id remapping. */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 4;
 
 export const MIGRATIONS: string[][] = [
   [
@@ -100,6 +100,19 @@ export const MIGRATIONS: string[][] = [
       approved_code TEXT,
       added_at TEXT NOT NULL)`,
   ],
+  [
+    // Files downloaded into app storage, per dataset or paper. Local to this device, so
+    // never part of an import.
+    `CREATE TABLE downloads (
+      path TEXT PRIMARY KEY,
+      owner_uid TEXT NOT NULL,
+      name TEXT NOT NULL,
+      url TEXT NOT NULL,
+      size INTEGER NOT NULL,
+      added_at TEXT NOT NULL)`,
+    `CREATE INDEX downloads_owner ON downloads (owner_uid)`,
+  ],
+  [`ALTER TABLE datasets ADD COLUMN starred INTEGER NOT NULL DEFAULT 0`],
 ];
 
 /** How each table merges on import. `content` columns are overwritten by the incoming
@@ -116,7 +129,7 @@ export const TABLES: { name: string; key: string[]; content: string[]; state: st
     name: "datasets",
     key: ["uid"],
     content: ["source", "accession", "title", "summary", "organism", "kind", "n_samples", "url", "pmid"],
-    state: ["notes", "added_at"],
+    state: ["notes", "starred", "added_at"],
   },
   {
     name: "resources",

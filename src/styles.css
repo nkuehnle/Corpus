@@ -493,6 +493,17 @@ h3 {
   line-height: 18px;
   text-align: center;
 }
+.data-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
 .badge.inline {
   position: static;
   display: inline-block;
@@ -965,4 +976,56 @@ pre.log.error {
 }
 .links .list {
   margin-bottom: 10px;
+}
+
+/* Downloadable files: the row opens, the side shows size and storage */
+.file-item {
+  cursor: default;
+}
+.file-main {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+}
+.file-main:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+.link-button {
+  background: none;
+  border: none;
+  padding: 4px 0;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.chip-note {
+  display: block;
+  font-size: 0.7rem;
+  opacity: 0.8;
+}
+
+.pick-list {
+  max-height: 50vh;
+  overflow-y: auto;
+}
+.pick-item {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.pick-item input {
+  width: 22px;
+  height: 22px;
+  flex: none;
+}
+.pick-item.disabled {
+  opacity: 0.55;
 }

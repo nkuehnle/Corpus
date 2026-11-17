@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { checkSearch, ensureNotificationPermission, publishAlertPlan } from "../alerts";
+import { linkedDatasets, type DatasetSummary } from "../api/datasets";
 import { citationCounts } from "../api/europepmc";
 import { fetchAbstract, searchPubmed, summarize, type PaperSummary, type PubmedSort } from "../api/pubmed";
 import { paperSupplements, type RemoteFile } from "../api/supplements";
@@ -8,6 +9,7 @@ import { Await, Back, Icon, Markdown, Modal, Notes, Segmented, ask, errorText } 
 import { paperUid, today, type Paper, type PaperStatus } from "../db/repo";
 import { openExternal } from "../platform";
 import { cache, navigate, repo, useLoad } from "../store";
+import { DatasetRow, toSummary as datasetSummary } from "./DatasetsPage";
 
 const PAGE = 20;
 
@@ -25,7 +27,41 @@ export function runSearch(query: string) {
   navigate("/papers/search");
 }
 
-function PaperRow({ p, cited, unseen }: { p: PaperSummary; cited?: number; unseen?: boolean }) {
+/** GEO series for a paper: the ones you saved for it, then those NCBI links to it. */
+async function datasetsFor(pmid: string): Promise<DatasetSummary[]> {
+  const saved = (await repo().datasets()).filter((d) => d.pmid === pmid).map(datasetSummary);
+  const linked = (await linkedDatasets([pmid]).catch(() => new Map<string, DatasetSummary[]>())).get(pmid) ?? [];
+  const have = new Set(saved.map((d) => d.accession));
+  return [...saved, ...linked.filter((d) => !have.has(d.accession))];
+}
+
+/** Which of these papers have a GEO series, looked up in the background so lists never wait. */
+function useWithData(pmids: string[]): Set<string> {
+  const [found, setFound] = useState<Set<string>>(new Set());
+  const key = pmids.join(",");
+  useEffect(() => {
+    if (!pmids.length) return;
+    let live = true;
+    Promise.all([linkedDatasets(pmids).catch(() => new Map<string, DatasetSummary[]>()), repo().datasets()]).then(
+      ([links, saved]) => {
+        if (!live) return;
+        const s = new Set([...links].filter(([, d]) => d.length).map(([p]) => p));
+        saved.forEach((d) => d.pmid && s.add(d.pmid));
+        setFound(s);
+      },
+      () => {},
+    );
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return found;
+}
+
+const DataTag = () => <span className="data-tag">GEO data</span>;
+
+function PaperRow({ p, cited, unseen, data }: { p: PaperSummary; cited?: number; unseen?: boolean; data?: boolean }) {
   return (
     <button
       className={`item ${unseen ? "unseen" : ""}`}
@@ -40,6 +76,7 @@ function PaperRow({ p, cited, unseen }: { p: PaperSummary; cited?: number; unsee
         <div className="item-meta">
           {p.journal} · {p.pubDate}
           {cited ? ` · cited ${cited}×` : ""}
+          {data && <DataTag />}
         </div>
       </span>
     </button>
@@ -53,6 +90,7 @@ function SearchTab() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const withData = useWithData(last.results.map((p) => p.pmid));
 
   const load = async (fresh: boolean, withSort = sort) => {
     const term = query.trim();
@@ -131,7 +169,7 @@ function SearchTab() {
           </div>
           <div className="list">
             {last.results.map((p) => (
-              <PaperRow key={p.pmid} p={p} cited={last.cited.get(p.pmid)} />
+              <PaperRow key={p.pmid} p={p} cited={last.cited.get(p.pmid)} data={withData.has(p.pmid)} />
             ))}
           </div>
           {last.results.length < last.count && (
@@ -185,6 +223,7 @@ function LibraryTab() {
   const papers = useLoad(() => repo().papers(), []);
   const [filter, setFilter] = useState<"all" | "starred" | PaperStatus>("all");
   const [find, setFind] = useState("");
+  const withData = useWithData((papers.data ?? []).flatMap((p) => (p.pmid ? [p.pmid] : [])));
   return (
     <Await of={papers}>
       {(all) => {
@@ -226,6 +265,7 @@ function LibraryTab() {
                     <div className="item-meta">
                       {p.journal} · {p.pub_date} · {STATUS_LABEL[p.status]}
                       {p.pmcid ? " · PMC full text" : p.doi ? " · full text at publisher" : ""}
+                      {p.pmid && withData.has(p.pmid) && <DataTag />}
                     </div>
                   </span>
                   {p.starred ? <span className="item-side">★</span> : null}
@@ -488,6 +528,21 @@ function PaperLinks({ p }: { p: PaperSummary }) {
   );
 }
 
+function LinkedData({ pmid }: { pmid: string }) {
+  const data = useLoad(() => datasetsFor(pmid), [pmid]);
+  if (!data.data?.length) return null;
+  return (
+    <>
+      <h2 className="section-title">GEO data</h2>
+      <div className="list">
+        {data.data.map((d) => (
+          <DatasetRow key={d.accession} d={d} />
+        ))}
+      </div>
+    </>
+  );
+}
+
 function toSummary(p: Paper): PaperSummary {
   return {
     pmid: p.pmid!,
@@ -594,6 +649,7 @@ export function PaperPage({ pmid }: { pmid: string }) {
               </div>
 
               <PaperLinks p={p} />
+              <LinkedData pmid={pmid} />
 
               <h2 className="section-title">Abstract</h2>
               {abstract == null ? (
@@ -620,7 +676,7 @@ export function PaperPage({ pmid }: { pmid: string }) {
               ) : files.length === 0 ? (
                 <p className="muted">No supplementary files are openly available for this article. Try the PMC full text page.</p>
               ) : (
-                <FileList files={files} title={p.title} />
+                <FileList files={files} owner={uid} title={p.title} />
               )}
 
               {saved && (

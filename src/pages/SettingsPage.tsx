@@ -75,9 +75,9 @@ export default function SettingsPage() {
       <div className="card">
         <div className="card-title">Import and back up</div>
         <p className="muted small">
-          Import a Corpus database file to add its study plans, papers, library items and datasets. Importing a newer version of
-          a plan updates it in place: nothing is duplicated, lessons it no longer has are removed, and your progress, notes
-          and stars are kept.
+          Import a Corpus database file to add its study plans, papers, library items and datasets. Importing a newer version of a
+          plan updates it in place: nothing is duplicated, lessons it no longer has are removed, and your progress, notes and
+          stars are kept.
         </p>
         {IN_APP ? (
           <div className="row">

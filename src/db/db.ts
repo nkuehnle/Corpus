@@ -46,8 +46,13 @@ export async function mergeFrom(source: Db, target: Db): Promise<ImportSummary> 
     if (!present.has(t.name)) continue;
     const rows = await source.select(`SELECT * FROM ${t.name}`);
     const existing = new Set((await target.select<{ uid: string }>(`SELECT uid FROM ${t.name}`)).map((r) => r.uid));
-    const cols = [...t.key, ...t.content, ...t.state];
-    const update = t.content.map((c) => `${c} = excluded.${c}`).join(", ");
+    // Columns added since the file was made are left to their defaults.
+    const has = new Set((await source.select<{ name: string }>(`PRAGMA table_info(${t.name})`)).map((r) => r.name));
+    const cols = [...t.key, ...t.content, ...t.state].filter((c) => has.has(c));
+    const update = t.content
+      .filter((c) => has.has(c))
+      .map((c) => `${c} = excluded.${c}`)
+      .join(", ");
     const sql =
       `INSERT INTO ${t.name} (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")}) ` +
       `ON CONFLICT (uid) DO UPDATE SET ${update}`;

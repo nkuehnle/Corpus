@@ -20,12 +20,19 @@ function throttled<T>(run: () => Promise<T>): Promise<T> {
   return result;
 }
 
-export function eutils(endpoint: string, params: Record<string, string | number>): Promise<Response> {
-  const q = new URLSearchParams({ tool: "corpus", ...params } as Record<string, string>);
+/** Parameters as an object, or as pairs when a name repeats (elink takes one `id` per record). */
+type Params = Record<string, string | number> | [string, string][];
+
+export function eutils(endpoint: string, params: Params): Promise<Response> {
+  const q = new URLSearchParams([
+    ["tool", "corpus"],
+    ...(Array.isArray(params) ? params : Object.entries(params).map(([k, v]): [string, string] => [k, String(v)])),
+  ]);
   if (apiKey) q.set("api_key", apiKey);
   return throttled(() => http(`${BASE}/${endpoint}.fcgi?${q}`));
 }
 
-export async function eutilsJson<T>(endpoint: string, params: Record<string, string | number>): Promise<T> {
-  return (await eutils(endpoint, { ...params, retmode: "json" })).json();
+export async function eutilsJson<T>(endpoint: string, params: Params): Promise<T> {
+  const withJson: Params = Array.isArray(params) ? [...params, ["retmode", "json"]] : { ...params, retmode: "json" };
+  return (await eutils(endpoint, withJson)).json();
 }

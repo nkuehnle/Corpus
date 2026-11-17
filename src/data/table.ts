@@ -11,6 +11,8 @@ export interface Table {
   numeric: boolean[];
   /** The view a derived table is best seen in first (a PCA result opens as a scatter plot). */
   prefer?: "scatter";
+  /** For each column, the GEO sample it holds, when known. */
+  samples?: (import("./geo").SampleInfo | null)[];
 }
 
 const TABULAR = /\.(csv|tsv|tab|txt|xlsx|xlsm|xls|ods)(\.gz)?$/i;
