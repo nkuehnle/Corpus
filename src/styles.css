@@ -504,6 +504,14 @@ h3 {
   font-weight: 600;
   line-height: 1.4;
 }
+.data-tag.free {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+.data-tag.paywalled {
+  border-color: var(--muted);
+  color: var(--muted);
+}
 .badge.inline {
   position: static;
   display: inline-block;

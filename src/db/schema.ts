@@ -1,6 +1,6 @@
 /** Every row is keyed by a stable text `uid`, and rows point at each other by uid.
  *  That makes merging another Corpus database a plain upsert with no id remapping. */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export const MIGRATIONS: string[][] = [
   [
@@ -113,6 +113,8 @@ export const MIGRATIONS: string[][] = [
     `CREATE INDEX downloads_owner ON downloads (owner_uid)`,
   ],
   [`ALTER TABLE datasets ADD COLUMN starred INTEGER NOT NULL DEFAULT 0`],
+  // A free copy outside PubMed Central, from Unpaywall: NULL until looked up, '' when there is none.
+  [`ALTER TABLE papers ADD COLUMN oa_url TEXT`],
 ];
 
 /** How each table merges on import. `content` columns are overwritten by the incoming
@@ -121,7 +123,7 @@ export const TABLES: { name: string; key: string[]; content: string[]; state: st
   {
     name: "papers",
     key: ["uid"],
-    content: ["pmid", "pmcid", "doi", "title", "authors", "journal", "pub_date", "abstract"],
+    content: ["pmid", "pmcid", "doi", "oa_url", "title", "authors", "journal", "pub_date", "abstract"],
     state: ["status", "starred", "notes", "added_at"],
   },
   { name: "searches", key: ["uid"], content: ["name", "query"], state: ["notify", "created_at", "last_checked"] },

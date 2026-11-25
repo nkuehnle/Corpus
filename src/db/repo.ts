@@ -9,6 +9,8 @@ export interface Paper {
   pmid: string | null;
   pmcid: string | null;
   doi: string | null;
+  /** A free copy outside PubMed Central: null until looked up, '' when there is none. */
+  oa_url: string | null;
   title: string;
   authors: string;
   journal: string;
@@ -124,6 +126,10 @@ export interface Script {
 
 export type ItemKind = "paper" | "resource" | "dataset" | "search" | "script";
 
+/** 1 when a paper has a free copy (PubMed Central or one Unpaywall found), 0 when Unpaywall
+ *  found none, NULL when it has not been checked. */
+const FREE_SQL = `CASE WHEN p.pmcid IS NOT NULL OR p.oa_url <> '' THEN 1 WHEN p.oa_url = '' THEN 0 END`;
+
 export interface LessonItem {
   uid: string;
   kind: ItemKind;
@@ -133,6 +139,8 @@ export interface LessonItem {
   title: string | null;
   /** Authors and year, resource kind, accession or query, depending on the kind. */
   detail: string | null;
+  /** For a paper: whether it can be read for free, or null when that is not known yet. */
+  free: number | null;
 }
 
 export const now = () => new Date().toISOString();
@@ -172,7 +180,7 @@ export class Repo {
       [paperUid(p.pmid), p.pmid, p.pmcid, p.doi, p.title, p.authors, p.journal, p.pubDate, abstract, now()],
     );
   }
-  updatePaper(uid: string, fields: Partial<Pick<Paper, "status" | "starred" | "notes" | "abstract" | "pmcid">>) {
+  updatePaper(uid: string, fields: Partial<Pick<Paper, "status" | "starred" | "notes" | "abstract" | "pmcid" | "oa_url">>) {
     return this.update("papers", uid, fields);
   }
   removePaper(uid: string) {
@@ -365,11 +373,11 @@ export class Repo {
          COALESCE(p.title, r.title, d.title, s.name, x.name) AS title,
          CASE i.kind
            WHEN 'paper' THEN p.authors || ' · ' || p.journal || ' ' || substr(p.pub_date, 1, 4)
-             || CASE WHEN p.pmcid IS NOT NULL THEN ' · PMC full text' WHEN p.doi IS NOT NULL THEN ' · full text at publisher' ELSE '' END
            WHEN 'resource' THEN r.kind || CASE WHEN r.author = '' THEN '' ELSE ' · ' || r.author END
            WHEN 'dataset' THEN d.source || ' ' || d.accession
            WHEN 'search' THEN s.query
-           WHEN 'script' THEN x.description END AS detail
+           WHEN 'script' THEN x.description END AS detail,
+         CASE WHEN i.kind = 'paper' THEN ${FREE_SQL} END AS free
        FROM lesson_items i
        LEFT JOIN papers p ON i.kind = 'paper' AND p.uid = i.ref_uid
        LEFT JOIN resources r ON i.kind = 'resource' AND r.uid = i.ref_uid

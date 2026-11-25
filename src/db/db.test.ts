@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import { mergeFrom, migrate } from "./db";
+import { Repo } from "./repo";
 import { MIGRATIONS } from "./schema";
 import { openNodeDb } from "./node";
 import { SCHEMA_VERSION } from "./schema";
@@ -136,4 +137,25 @@ it("updating the app keeps the data of an older version", async () => {
   expect(await db.select(`SELECT starred FROM papers`)).toEqual([{ starred: 1 }]);
   expect(await count(db, "scripts")).toBe(0);
   expect(await db.select(`SELECT value FROM settings WHERE key = 'schema_version'`)).toEqual([{ value: String(SCHEMA_VERSION) }]);
+});
+
+it("lesson papers say whether they can be read for free", async () => {
+  const db = await fresh();
+  const papers = [
+    ["pmc", "'PMC1'", "NULL"],
+    ["elsewhere", "NULL", "'https://example.org/a.pdf'"],
+    ["paywalled", "NULL", "''"],
+    ["unchecked", "NULL", "NULL"],
+  ];
+  for (const [uid, pmcid, oa] of papers) {
+    await db.execute(`INSERT INTO papers (uid, pmcid, oa_url, title, added_at) VALUES ('${uid}', ${pmcid}, ${oa}, 't', 'x')`);
+    await db.execute(`INSERT INTO lesson_items (uid, lesson_uid, kind, ref_uid) VALUES ('i-${uid}', 'l1', 'paper', '${uid}')`);
+  }
+  const items = await new Repo(db).lessonItems("l1");
+  expect(Object.fromEntries(items.map((i) => [i.ref_uid, i.free]))).toEqual({
+    pmc: 1,
+    elsewhere: 1,
+    paywalled: 0,
+    unchecked: null,
+  });
 });

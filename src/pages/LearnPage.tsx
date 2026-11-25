@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Await, Back, Icon, KindIcon, Markdown, Notes, ask } from "../components/ui";
+import { Await, Back, Icon, AccessTag, KindIcon, Markdown, Notes, ask } from "../components/ui";
 import { now, type Lesson, type LessonItem } from "../db/repo";
 import { navigate, repo, useLoad } from "../store";
 import { viewer } from "../viewer";
@@ -200,7 +200,10 @@ export function LessonPage({ uid }: { uid: string }) {
                           <KindIcon kind={i.kind === "resource" ? (i.detail?.split(" · ")[0] ?? "link") : i.kind} />
                           <span className="item-main">
                             <span className="item-title">{i.title ?? "Missing from this database"}</span>
-                            <div className="item-meta">{i.detail}</div>
+                            <div className="item-meta">
+                              {i.detail}
+                              {i.free != null && <AccessTag free={!!i.free} />}
+                            </div>
                             {i.note && <div className="item-meta">{i.note}</div>}
                           </span>
                         </button>

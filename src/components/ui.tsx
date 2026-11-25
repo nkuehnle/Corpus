@@ -145,3 +145,8 @@ export function formatBytes(n: number | null): string {
 }
 
 export const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+/** Whether a paper can be read without a subscription. */
+export const AccessTag = ({ free }: { free: boolean }) => (
+  <span className={`data-tag ${free ? "free" : "paywalled"}`}>{free ? "Free" : "Paywalled"}</span>
+);

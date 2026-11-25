@@ -21,6 +21,7 @@
         { "url": "https://*.ncbi.nlm.nih.gov" },
         { "url": "https://www.ebi.ac.uk" },
         { "url": "https://europepmc.org" },
+        { "url": "https://api.unpaywall.org" },
         { "url": "https://www.omicsdi.org" },
         { "url": "https://pmc-oa-opendata.s3.amazonaws.com" }
       ]

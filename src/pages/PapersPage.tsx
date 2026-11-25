@@ -4,8 +4,9 @@ import { linkedDatasets, type DatasetSummary } from "../api/datasets";
 import { citationCounts } from "../api/europepmc";
 import { fetchAbstract, searchPubmed, summarize, type PaperSummary, type PubmedSort } from "../api/pubmed";
 import { paperSupplements, type RemoteFile } from "../api/supplements";
+import { freeCopy } from "../api/unpaywall";
 import { FileList } from "../components/FileList";
-import { Await, Back, Icon, Markdown, Modal, Notes, Segmented, ask, errorText } from "../components/ui";
+import { AccessTag, Await, Back, Icon, Markdown, Modal, Notes, Segmented, ask, errorText } from "../components/ui";
 import { paperUid, today, type Paper, type PaperStatus } from "../db/repo";
 import { openExternal } from "../platform";
 import { cache, navigate, repo, useLoad } from "../store";
@@ -76,6 +77,7 @@ function PaperRow({ p, cited, unseen, data }: { p: PaperSummary; cited?: number;
         <div className="item-meta">
           {p.journal} · {p.pubDate}
           {cited ? ` · cited ${cited}×` : ""}
+          {p.pmcid && <AccessTag free />}
           {data && <DataTag />}
         </div>
       </span>
@@ -264,7 +266,7 @@ function LibraryTab() {
                     <div className="item-meta">{p.authors}</div>
                     <div className="item-meta">
                       {p.journal} · {p.pub_date} · {STATUS_LABEL[p.status]}
-                      {p.pmcid ? " · PMC full text" : p.doi ? " · full text at publisher" : ""}
+                      {(p.pmcid || p.oa_url != null) && <AccessTag free={!!(p.pmcid || p.oa_url)} />}
                       {p.pmid && withData.has(p.pmid) && <DataTag />}
                     </div>
                   </span>
@@ -475,7 +477,7 @@ export function AlertPage({ uid }: { uid: string }) {
 
 /** Where a paper can be read, grouped by who hosts it: NCBI's records (PubMed, and PubMed
  *  Central when there is a free copy) and the publisher's own page, reached through the DOI. */
-function PaperLinks({ p }: { p: PaperSummary }) {
+function PaperLinks({ p, oaUrl }: { p: PaperSummary; oaUrl: string | null }) {
   const ncbi = [
     {
       label: "PubMed record",
@@ -506,6 +508,20 @@ function PaperLinks({ p }: { p: PaperSummary }) {
           </button>
         ))}
       </div>
+      {oaUrl && (
+        <>
+          <div className="links-group">Free copy</div>
+          <div className="list">
+            <button className="item" onClick={() => openExternal(oaUrl)}>
+              <span className="item-main">
+                <span className="item-title">Read it free</span>
+                <div className="item-meta">{new URL(oaUrl).hostname} · found by Unpaywall</div>
+              </span>
+              <span className="item-side">↗</span>
+            </button>
+          </div>
+        </>
+      )}
       <div className="links-group">Publisher</div>
       <div className="list">
         {p.doi ? (
@@ -513,7 +529,7 @@ function PaperLinks({ p }: { p: PaperSummary }) {
             <span className="item-main">
               <span className="item-title">Publisher's page (DOI)</span>
               <div className="item-meta">
-                {p.doi} · doi.org{p.pmcid ? "" : " · may need a subscription"}
+                {p.doi} · doi.org{p.pmcid || oaUrl ? "" : oaUrl === "" ? " · paywalled: no free copy found" : " · may need a subscription"}
               </div>
             </span>
             <span className="item-side">↗</span>
@@ -568,6 +584,7 @@ export function PaperPage({ pmid }: { pmid: string }) {
   const [abstract, setAbstract] = useState<string | null>(null);
   const [cited, setCited] = useState<number | null>(null);
   const [files, setFiles] = useState<RemoteFile[] | "loading" | string | null>(null);
+  const [oaUrl, setOaUrl] = useState<string | null>(null);
 
   const saved = data.data?.saved ?? null;
   useEffect(() => {
@@ -580,6 +597,18 @@ export function PaperPage({ pmid }: { pmid: string }) {
           if (data.data?.saved) void repo().updatePaper(uid, { abstract: text });
         },
         (e) => setAbstract(`*Could not load the abstract: ${errorText(e)}*`),
+      );
+    // Papers outside PubMed Central are often free elsewhere; saved papers remember the answer.
+    const { summary } = data.data;
+    const known = data.data.saved?.oa_url ?? null;
+    setOaUrl(known);
+    if (!summary.pmcid && summary.doi && known == null)
+      freeCopy(summary.doi).then(
+        (url) => {
+          setOaUrl(url);
+          if (data.data?.saved) void repo().updatePaper(uid, { oa_url: url });
+        },
+        () => {},
       );
     citationCounts([pmid]).then(
       (m) => setCited(m.get(pmid) ?? null),
@@ -640,6 +669,7 @@ export function PaperPage({ pmid }: { pmid: string }) {
                     className="button primary"
                     onClick={async () => {
                       await repo().savePaper(p, abstract);
+                      if (oaUrl != null) await repo().updatePaper(uid, { oa_url: oaUrl });
                       data.reload();
                     }}
                   >
@@ -648,7 +678,7 @@ export function PaperPage({ pmid }: { pmid: string }) {
                 )}
               </div>
 
-              <PaperLinks p={p} />
+              <PaperLinks p={p} oaUrl={oaUrl} />
               <LinkedData pmid={pmid} />
 
               <h2 className="section-title">Abstract</h2>
